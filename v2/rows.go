@@ -227,3 +227,15 @@ func (r *Rows) ColumnTypeScanType(index int) reflect.Type {
 	}
 	return scantype
 }
+
+// To support the NextResultSet interface, you need to implement two functions. But the sql.Rows type
+// only provides the NextResultSet function, which uses both. See https://pkg.go.dev/database/sql#Rows.NextResultSet
+// The current implementation of mapi.ResultSet.StoreResult function does not handle multiple resultsets. So these
+// functions are strictly speaking not needed. But we provide them to document this behaviour.
+func (r *Rows) HasNextResultSet() bool {
+	return false
+}
+
+func (r *Rows) NextResultSet() error {
+	return io.EOF
+}

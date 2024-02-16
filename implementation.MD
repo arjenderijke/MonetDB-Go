@@ -60,6 +60,7 @@ In version 1, every statement was a prepared statement. This is not needed in ma
 - The [Out](https://pkg.go.dev/database/sql#Out) interface is not implemented because MonetDB stored procedures do not support (IN)OUT parameters at the moment.
 - The [documentation](https://www.monetdb.org/documentation-Dec2023/user-guide/sql-manual/transactions/) mentions the TRANSACTION READ ONLY option, but it is not supported in the MonetDB server.
 - The [Nullable](https://pkg.go.dev/database/sql#ColumnType.Nullable) function always returns false, because the Mapi protocol does not return information about the (NOT) NULL property of a column.
+- The [NextResultSet](https://pkg.go.dev/database/sql#Rows.NextResultSet) function always returns false, because the current implementation of mapi.ResultSet.StoreResult function does not handle multiple resultsets.
 
 ### Testing
 
