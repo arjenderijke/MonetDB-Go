@@ -10,7 +10,7 @@ To install the `monetdb` package to your `$GOPATH`, simply use
 the `go` tool. Make sure you have [Git](http://git-scm.com/downloads) installed.
 
 ```bash
-$ go get github.com/MonetDB/MonetDB-Go@v2.0.1
+$ go get github.com/MonetDB/MonetDB-Go@v2.0.2
 ```
 
 ## Usage

@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/MonetDB/MonetDB-Go/src"
+	_ "github.com/MonetDB/MonetDB-Go/v2"
 )
   
 var (

@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"os"
 
-	_ "github.com/MonetDB/MonetDB-Go/src"
+	_ "github.com/MonetDB/MonetDB-Go/v2"
 )
 
 func main() {

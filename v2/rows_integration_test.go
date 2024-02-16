@@ -148,7 +148,6 @@ func TestRowsIntegration(t *testing.T) {
 	defer db.Close()
 }
 
-
 func TestColumnTypesIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -300,7 +299,37 @@ func TestColumnTypesIntegration(t *testing.T) {
 			"drop table test1",
 		},
 		{
+			"create table test1 ( name double precision, value numeric)",
+			"insert into test1 values ( 1.2345, 67.890 )",
+			"select * from test1",
+			[]string{"name", "value"},
+			[]bool{false, false},
+			[]int64{0, 0},
+			[]bool{false, false},
+			[]string{"DOUBLE", "DECIMAL"},
+			[]string{"float64", "float64"},
+			[]bool{false, true},
+			[]int64{0, 18},
+			[]int64{0, 3},
+			"drop table test1",
+		},
+		{
 			"create table test1 ( name timestamptz)",
+			"insert into test1 values ( current_timestamp() )",
+			"select * from test1",
+			[]string{"name"},
+			[]bool{false},
+			[]int64{0},
+			[]bool{false},
+			[]string{"TIMESTAMPTZ"},
+			[]string{"Time"},
+			[]bool{false},
+			[]int64{0},
+			[]int64{0},
+			"drop table test1",
+		},
+		{
+			"create table test1 ( name timestamp with time zone)",
 			"insert into test1 values ( current_timestamp() )",
 			"select * from test1",
 			[]string{"name"},

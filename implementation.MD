@@ -16,6 +16,10 @@ It turns out that the go module system has a specific way of implementing a new 
 
 [Mapi](https://www.monetdb.org/documentation-Jun2023/user-guide/client-interfaces/libraries-drivers/mapi-library/) is the API that provides the communication protocol with the MonetDB database. To understand the details of the mapi protocol implementation in this library, check the documentation in the [PHP](https://github.com/MonetDB/MonetDB-PHP/tree/master/protocol_doc) driver.
 
+#### Type aliases
+
+Besides a number of [column types](https://www.monetdb.org/documentation/user-guide/sql-manual/data-types/base-types/), MonetDB also defines type aliases. We don't need to implement anything specific to support a type alias. The code that converts between a MonetDB and a Go type uses the actual column type that is returned by Mapi protocol. The type aliases are only used in the SQL query.
+
 ### Refactoring
 
 We will create resultset, resultset schema and resultset metadata types. The code in the current previous implementation, for example the description type and the statement.storeResult function, will be moved to this new go source file. We will move all monetdb specific code out of the implementation of the sql driver interfaces. With the resultset types implemented, it will be relatively easy to implement the column type interfaces.
@@ -36,7 +40,7 @@ We will prefix the error messages with the package name. That way it is clear wh
 - [ ] set_downloader
 - [ ] Configure connection using socket
 - [ ] Implement fetching NextResultSet 
-- [ ] Add type aliases
+- [X] Add type aliases
 - [ ] Add monetdb specific types, for example "uuid"
 
 ## driver package and sql package latest version
@@ -55,6 +59,7 @@ In version 1, every statement was a prepared statement. This is not needed in ma
 
 - The [Out](https://pkg.go.dev/database/sql#Out) interface is not implemented because MonetDB stored procedures do not support (IN)OUT parameters at the moment.
 - The [documentation](https://www.monetdb.org/documentation-Dec2023/user-guide/sql-manual/transactions/) mentions the TRANSACTION READ ONLY option, but it is not supported in the MonetDB server.
+- The [Nullable](https://pkg.go.dev/database/sql#ColumnType.Nullable) function always returns false, because the Mapi protocol does not return information about the (NOT) NULL property of a column.
 
 ### Testing
 

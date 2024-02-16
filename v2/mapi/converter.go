@@ -32,6 +32,7 @@ const (
 	MDB_TIME      = "time"      // (T) time of day
 	MDB_TIMESTAMP = "timestamp" // (T) date concatenated with unique time
 	MDB_INTERVAL  = "interval"  // (Q) a temporal interval
+	MDB_FLOAT     = "float"
 
 	MDB_MONTH_INTERVAL = "month_interval"
 	MDB_SEC_INTERVAL   = "sec_interval"
@@ -42,22 +43,17 @@ const (
 	MDB_SHORTINT    = "shortint"
 	MDB_MEDIUMINT   = "mediumint"
 	MDB_LONGINT     = "longint"
-	MDB_FLOAT       = "float"
 	MDB_TIMESTAMPTZ = "timestamptz"
 
 	// full names and aliases, spaces are replaced with underscores
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_CHARACTER               = MDB_CHAR
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_CHARACTER_VARYING       = MDB_VARCHAR
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_CHARACHTER_LARGE_OBJECT = MDB_CLOB
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_BINARY_LARGE_OBJECT     = MDB_BLOB
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_NUMERIC                 = MDB_DECIMAL
-	//lint:ignore U1000 prepare to enable staticchecks
-	mdb_DOUBLE_PRECISION        = MDB_DOUBLE
+	// We don't need to define the aliases, because they are never used. The
+	// mapi protocol returns the "real" name in the column type information
+	// MDB_CHARACTER               = MDB_CHAR
+	// MDB_CHARACTER_VARYING       = MDB_VARCHAR
+	// MDB_CHARACHTER_LARGE_OBJECT = MDB_CLOB
+	// MDB_BINARY_LARGE_OBJECT     = MDB_BLOB
+	// MDB_NUMERIC                 = MDB_DECIMAL
+	// MDB_DOUBLE_PRECISION        = MDB_DOUBLE
 )
 
 var timeFormats = []string{
