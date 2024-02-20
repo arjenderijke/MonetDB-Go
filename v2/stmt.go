@@ -15,7 +15,6 @@ type Stmt struct {
 	isPreparedStatement bool
 	conn  *Conn
 	query mapi.Query
-	resultset mapi.ResultSet
 }
 
 func newStmt(c *Conn, q string, prepare bool) *Stmt {
@@ -23,9 +22,7 @@ func newStmt(c *Conn, q string, prepare bool) *Stmt {
 		conn:   c,
 		isPreparedStatement: prepare,
 	}
-	s.resultset.Metadata.ExecId = -1
-	s.query.Mapi = c.mapi
-	s.query.SqlQuery = q
+	s.query = mapi.NewQuery(s.conn.mapi, q)
 	return s
 }
 
@@ -87,9 +84,9 @@ func (s *Stmt) execResult(ctx context.Context, args []driver.NamedValue) (driver
 		return res, res.err
 	}
 
-	err = s.resultset.StoreResult(r)
-	res.lastInsertId = s.resultset.Metadata.LastRowId
-	res.rowsAffected = s.resultset.Metadata.RowCount
+	err = s.query.StoreResult(r)
+	res.lastInsertId = s.query.Result().Metadata.LastRowId
+	res.rowsAffected = s.query.Result().Metadata.RowCount
 	res.err = err
 
 	return res, res.err
@@ -154,33 +151,30 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 func (s *Stmt) queryResult(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	rows := newRows(s.conn.mapi, &s.resultset)
+	rows := newRows(s.query)
 	r, err := s.mapiDo(ctx, args)
 	if err != nil {
 		rows.err = err
 		return rows, rows.err
 	}
 
-	err = s.resultset.StoreResult(r)
+	err = s.query.StoreResult(r)
 	if err != nil {
 		rows.err = err
 		return rows, rows.err
 	}
 	// We have gotten the first batch of the resultset. The RowCount is the total number of rows in the result.
 	// But we have only at most mapi.MAPI_ARRAY_SIZE rows available.
-	rows.queryId = s.resultset.Metadata.QueryId
-	rows.lastRowId = s.resultset.Metadata.LastRowId
-	rows.rowCount = s.resultset.Metadata.RowCount
-	rows.offset = s.resultset.Metadata.Offset
-	rows.rows = convertRows(s.resultset.Rows, s.resultset.Metadata.ColumnCount)
-	rows.schema = s.resultset.Schema
+	rows.offset = s.query.Result().Metadata.Offset
+	rows.rows = convertRows(s.query.Result().Rows, s.query.Result().Metadata.ColumnCount)
+	rows.schema = s.query.Result().Schema
 
 	return rows, rows.err
 }
 
 func (s *Stmt) exec(args []driver.NamedValue) (string, error) {
-	if s.isPreparedStatement && s.resultset.Metadata.ExecId == -1 {
-		err := s.query.PrepareQuery(&s.resultset)
+	if s.isPreparedStatement && s.query.Result().Metadata.ExecId == -1 {
+		err := s.query.PrepareQuery()
 		if err != nil {
 			return "", err
 		}
@@ -189,14 +183,14 @@ func (s *Stmt) exec(args []driver.NamedValue) (string, error) {
 	if len(args) != 0 {
 		if s.isPreparedStatement {
 			queryParams := convertParamValues(paramValuesList(args))
-			return s.query.ExecutePreparedQuery(&s.resultset, queryParams)
+			return s.query.ExecutePreparedQuery(queryParams)
 		} else {
 			queryParamsNames := paramNamesList(args)
 			queryParams := convertParamValues(paramValuesList(args))
-			return s.query.ExecuteNamedQuery(&s.resultset, queryParamsNames, queryParams)
+			return s.query.ExecuteNamedQuery(queryParamsNames, queryParams)
 		}
 	} else {
-		return s.query.ExecuteQuery(&s.resultset)
+		return s.query.ExecuteQuery()
 	}
 }
 

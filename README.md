@@ -46,7 +46,7 @@ If the `port` is blank, then the default port `50000` will be used.
 
 ## API Documentation
 
-https://pkg.go.dev/github.com/MonetDB/MonetDB-Go
+https://pkg.go.dev/github.com/MonetDB/MonetDB-Go/v2
 
 ## Testing
 

@@ -26,7 +26,7 @@ func TestResultSet(t *testing.T) {
 
 func TestResultSetStoreResult(t *testing.T) {
 	t.Run("Verify StoreResult with empty result", func(t *testing.T) {
-		var r ResultSet
+		var r query
 		var response = ""
 		err := r.StoreResult(response)
 		if err != nil {
@@ -35,7 +35,7 @@ func TestResultSetStoreResult(t *testing.T) {
 	})
 
 	t.Run("Verify StoreResult from create table", func(t *testing.T) {
-		var r ResultSet
+		var r = NewQuery(nil, "")
 		var response = `&5 0 0 6 0 0 0 0 20
 % .prepare,     .prepare,       .prepare,       .prepare,       .prepare,       .prepare # table_name
 % type, digits, scale,  schema, table,  column # name
@@ -53,7 +53,7 @@ func TestResultSetStoreResult(t *testing.T) {
 	})
 
 	t.Run("Verify StoreResult from prepare select star", func(t *testing.T) {
-		var r ResultSet
+		var r = NewQuery(nil, "")
 		var response = `&5 2 1 6 1 0 0 0 36
 % .prepare,     .prepare,       .prepare,       .prepare,       .prepare,       .prepare # table_name
 % type, digits, scale,  schema, table,  column # name
@@ -76,7 +76,7 @@ func TestResultSetStoreResult(t *testing.T) {
 	})
 
 	t.Run("Verify StoreResult from prepare select star", func(t *testing.T) {
-		var r ResultSet
+		var r = NewQuery(nil, "")
 		var response = `&1 2 1 1 1 0 201 169 7
 % sys.test1 # table_name
 % name # name
@@ -90,10 +90,10 @@ func TestResultSetStoreResult(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.Schema[0].DisplaySize != 5 {
+		if r.Result().Schema[0].DisplaySize != 5 {
 			t.Error("unexpected displaysize")
 		}
-		if r.Schema[0].InternalSize != 16 {
+		if r.Result().Schema[0].InternalSize != 16 {
 			t.Error("Unexpected internalsize")
 		}
 	})

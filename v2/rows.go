@@ -18,41 +18,22 @@ import (
 )
 
 type Rows struct {
-	conn        *mapi.MapiConn
-	resultset   *mapi.ResultSet
+	query       mapi.Query
 	active      bool
-	queryId     int
 	err         error
-
 	rowNum      int
 	offset      int
-	lastRowId   int
-	rowCount    int
 	rows        [][]driver.Value
 	schema      []mapi.TableElement
-	columns     []string
 }
 
-func newRows(c *mapi.MapiConn, r *mapi.ResultSet) *Rows {
+func newRows(q mapi.Query) *Rows {
 	return &Rows{
-		conn:      c,
-		resultset: r,
-		active:    true,
-		err:       nil,
-
-		columns:   nil,
-		rowNum:    0,
+		query:   q,
+		active:  true,
+		err:     nil,
+		rowNum:  0,
 	}
-}
-
-func (r *Rows) Columns() []string {
-	if r.columns == nil {
-		r.columns = make([]string, len(r.schema))
-		for i, d := range r.schema {
-			r.columns[i] = d.ColumnName
-		}
-	}
-	return r.columns
 }
 
 func (r *Rows) Close() error {
@@ -60,15 +41,19 @@ func (r *Rows) Close() error {
 	return nil
 }
 
+func (r *Rows) Columns() []string {
+	return r.query.Result().Columns()
+}
+
 func (r *Rows) Next(dest []driver.Value) error {
 	if !r.active {
 		return fmt.Errorf("monetdb: rows closed")
 	}
-	if r.queryId == -1 {
+	if r.query.Result().Metadata.QueryId == -1 {
 		return fmt.Errorf("monetdb: query didn't result in a resultset")
 	}
 
-	if r.rowNum >= r.rowCount {
+	if r.rowNum >= r.query.Result().Metadata.RowCount {
 		return io.EOF
 	}
 
@@ -109,7 +94,7 @@ func (s *Rows) mapiDo(ctx context.Context, amount int) (string, error) {
 	c := make(chan res, 1)
 
     go func() {
-		r, err := s.conn.FetchNext(s.queryId, s.offset, amount)
+		r, err := s.query.FetchNext(s.offset, amount)
 		result := res{r, err}
 		c <- result
 		}()
@@ -124,12 +109,12 @@ func (s *Rows) mapiDo(ctx context.Context, amount int) (string, error) {
 }
 
 func (r *Rows) fetchNext() error {
-	if r.rowNum >= r.rowCount {
+	if r.rowNum >= r.query.Result().Metadata.RowCount {
 		return io.EOF
 	}
 
 	r.offset += len(r.rows)
-	end := min(r.rowCount, r.rowNum+mapi.MAPI_ARRAY_SIZE)
+	end := min(r.query.Result().Metadata.RowCount, r.rowNum+mapi.MAPI_ARRAY_SIZE)
 	amount := end - r.offset
 
 	res, err := r.mapiDo(context.Background(), amount)
@@ -137,9 +122,9 @@ func (r *Rows) fetchNext() error {
 		return err
 	}
 
-	r.resultset.StoreResult(res)
-	r.rows = convertRows(r.resultset.Rows, r.resultset.Metadata.ColumnCount)
-	r.schema = r.resultset.Schema
+	r.query.StoreResult(res)
+	r.rows = convertRows(r.query.Result().Rows, r.query.Result().Metadata.ColumnCount)
+	r.schema = r.query.Result().Schema
 
 	return nil
 }
@@ -233,9 +218,9 @@ func (r *Rows) ColumnTypeScanType(index int) reflect.Type {
 // The current implementation of mapi.ResultSet.StoreResult function does not handle multiple resultsets. So these
 // functions are strictly speaking not needed. But we provide them to document this behaviour.
 func (r *Rows) HasNextResultSet() bool {
-	return false
+	return r.query.HasNextResultSet()
 }
 
 func (r *Rows) NextResultSet() error {
-	return io.EOF
+	return r.query.NextResultSet()
 }

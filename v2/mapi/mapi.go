@@ -118,7 +118,7 @@ func (c *MapiConn) Execute(query string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *MapiConn) FetchNext(queryId int, offset int, amount int) (string, error) {
+func (c *MapiConn) fetchNext(queryId int, offset int, amount int) (string, error) {
 	cmd := fmt.Sprintf("Xexport %d %d %d", queryId, offset, amount)
 	return c.cmd(cmd)
 }
