@@ -41,7 +41,7 @@ We will prefix the error messages with the package name. That way it is clear wh
 - [ ] Configure connection using socket
 - [X] Implement fetching NextResultSet
 - [X] Add type aliases
-- [ ] Add monetdb specific types, for example "uuid"
+- [X] Add monetdb specific types, for example "uuid"
 
 ## driver package and sql package latest version
 

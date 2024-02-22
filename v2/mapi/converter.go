@@ -54,6 +54,12 @@ const (
 	// MDB_BINARY_LARGE_OBJECT     = MDB_BLOB
 	// MDB_NUMERIC                 = MDB_DECIMAL
 	// MDB_DOUBLE_PRECISION        = MDB_DOUBLE
+
+	// MonetDB specific types
+	MDB_URL  = "url"
+	MDB_UUID = "uuid"
+	MDB_INET = "inet"
+	MDB_JSON = "json"
 )
 
 var timeFormats = []string{
@@ -71,6 +77,15 @@ type toMonetConverter func(Value) (string, error)
 
 func strip(v string) (Value, error) {
 	return unquote(strings.TrimSpace(v[1 : len(v)-1]))
+}
+
+func toJsonString(v string) (Value, error) {
+	// To get the correct json value backe, we need to remove
+	// the double quotes around the string and unquote the
+	// double quotes inside the json value.
+	// And also check that you do the replacement correctly, this
+	// replaces and escaped double quote with an unescaped double quote.
+	return strings.ReplaceAll(v[1 : len(v)-1], "\\\"", "\""), nil
 }
 
 // from strconv.contains
@@ -235,6 +250,10 @@ var toGoMappers = map[string]toGoConverter{
 	MDB_MEDIUMINT:      toInt32,
 	MDB_LONGINT:        toInt64,
 	MDB_FLOAT:          toFloat,
+	MDB_URL:            strip,
+	MDB_UUID:           strip,
+	MDB_INET:           strip,
+	MDB_JSON:           toJsonString,
 }
 
 func toString(v Value) (string, error) {

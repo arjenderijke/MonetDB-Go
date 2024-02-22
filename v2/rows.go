@@ -202,6 +202,11 @@ func (r *Rows) ColumnTypeScanType(index int) reflect.Type {
 		mapi.MDB_TIMESTAMP,
 		mapi.MDB_TIMESTAMPTZ :
 		scantype = reflect.TypeOf(time.Time{})
+	case mapi.MDB_URL,
+		mapi.MDB_UUID,
+		mapi.MDB_INET,
+		mapi.MDB_JSON :
+		scantype = reflect.TypeOf("")
 	default:
 		scantype = reflect.TypeOf(nil)
 	}
