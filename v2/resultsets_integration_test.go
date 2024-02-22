@@ -290,7 +290,7 @@ func TestResultsetMultipleIntegration(t *testing.T) {
 			// The column name should be "name1", from the first table. But we get the schema information of
 			// the second table. The current version of the tests uses the wrong version to get the test to
 			// pass. We do this to document the incorrect version, before the rewrite.
-			if column != "value" {
+			if column != "name" {
 				t.Error("unexpected column name", column)
 			}
 		}
@@ -303,9 +303,17 @@ func TestResultsetMultipleIntegration(t *testing.T) {
 				t.Error("unexpected value of name is", name)
 			}
 		}
-	
 		if rows.NextResultSet() {
-			t.Fatal("unexpected second resultset")
+			columnlist, err  := rows.Columns()
+			if err != nil {
+				t.Error(err)
+			}
+				for _, column := range columnlist {
+				if column != "value" {
+					t.Error("unexpected column name", column)
+				}
+			}
+
 			for rows.Next() {
 				var value int
 				if err := rows.Scan(&value); err != nil {

@@ -6,6 +6,7 @@
 package mapi
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -16,6 +17,7 @@ type query struct {
 	mapi   *MapiConn
 	sqlQuery string
 	resultSets []ResultSet
+	currentResultSet int
 }
 
 /* The Query interface type handles the execution of a sql query, that can contain multiple
@@ -44,18 +46,77 @@ func NewQuery(conn *MapiConn, q string) Query {
 		mapi: conn,
 		sqlQuery: q,
 		resultSets: make([]ResultSet, 0),
+		currentResultSet: -1,
 	}
-	r := new(ResultSet)
-	r.Metadata.ExecId = -1
-	res.resultSets = append(res.resultSets, *r)
-	return res
+	return &res
 }
 
 func (q query) Result() *ResultSet {
-	return &q.resultSets[0]
+	if q.currentResultSet == -1 {
+		return nil
+	}
+	return &q.resultSets[q.currentResultSet]
 }
 
-func (q query) StoreResult(r string) error {
+type LineType = int
+const (
+	PROMT LineType = iota
+	INFO
+	ERROR
+	QTABLE
+	QUPDATE
+	QSCHEMA
+	QTRANS
+	QPREPARE
+	QBLOCK
+	HEADER
+	TUPLE
+	REDIRECT
+	OK
+	UNKNOWN
+)
+
+func getLineType(line string) LineType {
+	var lineType LineType
+
+	// PROMPT is the empty string, so if we used the hasprefix method here, we would
+	// always get true. So use the exact match to determine is the line is a prompt
+	if (line == mapi_MSG_PROMPT) {
+		lineType = PROMT
+	} else if (strings.HasPrefix(line, mapi_MSG_INFO)) {
+		lineType = INFO
+	} else if (strings.HasPrefix(line, mapi_MSG_ERROR)) {
+		lineType = ERROR
+	} else if (strings.HasPrefix(line, mapi_MSG_QPREPARE)) {
+		lineType = QPREPARE
+	} else if (strings.HasPrefix(line, mapi_MSG_QTABLE)) {
+		lineType = QTABLE
+	} else if (strings.HasPrefix(line, mapi_MSG_TUPLE)) {
+		lineType = TUPLE
+	} else if (strings.HasPrefix(line, mapi_MSG_QBLOCK)) {
+		lineType = QBLOCK
+	} else if (strings.HasPrefix(line, mapi_MSG_QSCHEMA)) {
+		lineType = QSCHEMA
+	} else if (strings.HasPrefix(line, mapi_MSG_QUPDATE)) {
+		lineType = QUPDATE
+	} else if (strings.HasPrefix(line, mapi_MSG_QTRANS)) {
+		lineType = QTRANS
+	} else if (strings.HasPrefix(line, mapi_MSG_HEADER)) {
+		lineType = HEADER
+	} else {
+		lineType = UNKNOWN
+	}
+	return lineType
+}
+
+func (q *query) newResultSet() {
+	r := ResultSet{}
+	r.Metadata.ExecId = -1
+	q.resultSets = append(q.resultSets, r)
+	q.currentResultSet++
+}
+
+func (q *query) StoreResult(r string) error {
 	var columnNames []string
 	var columnTypes []string
 	var displaySizes []int
@@ -64,16 +125,24 @@ func (q query) StoreResult(r string) error {
 	var scales []int
 	var nullOks []int
 
+	var addedResultSets bool
+
 	for _, line := range strings.Split(r, "\n") {
-		if strings.HasPrefix(line, mapi_MSG_INFO) {
+		lineType := getLineType(line)
+		if lineType == INFO {
 			// TODO log
 
-		} else if strings.HasPrefix(line, mapi_MSG_QPREPARE) {
+		} else if lineType == QPREPARE {
+			q.newResultSet()
+
 			t := strings.Split(strings.TrimSpace(line[2:]), " ")
 			q.Result().Metadata.ExecId, _ = strconv.Atoi(t[0])
 			return nil
 
-		} else if strings.HasPrefix(line, mapi_MSG_QTABLE) {
+		} else if lineType == QTABLE {
+			q.newResultSet()
+			addedResultSets = true
+
 			t := strings.Split(strings.TrimSpace(line[2:]), " ")
 			q.Result().Metadata.QueryId, _ = strconv.Atoi(t[0])
 			q.Result().Metadata.RowCount, _ = strconv.Atoi(t[1])
@@ -87,36 +156,47 @@ func (q query) StoreResult(r string) error {
 			scales = make([]int, q.Result().Metadata.ColumnCount)
 			nullOks = make([]int, q.Result().Metadata.ColumnCount)
 
-		} else if strings.HasPrefix(line, mapi_MSG_TUPLE) {
+		} else if lineType == TUPLE {
 			v, err := q.Result().parseTuple(line)
 			if err != nil {
 				return err
 			}
 			q.Result().Rows = append(q.Result().Rows, v)
 
-		} else if strings.HasPrefix(line, mapi_MSG_QBLOCK) {
+		} else if lineType == QBLOCK {
 			q.Result().Rows = make([][]Value, 0)
 
-		} else if strings.HasPrefix(line, mapi_MSG_QSCHEMA) {
+		} else if lineType == QSCHEMA {
+			q.newResultSet()
+			addedResultSets = true
+
 			q.Result().Metadata.Offset = 0
 			q.Result().Rows = make([][]Value, 0)
 			q.Result().Metadata.LastRowId = 0
 			q.Result().Schema = nil
 			q.Result().Metadata.RowCount = 0
 
-		} else if strings.HasPrefix(line, mapi_MSG_QUPDATE) {
+		} else if lineType == QUPDATE {
+			if q.currentResultSet == -1 {
+				q.newResultSet()
+				addedResultSets = true
+			}
+
 			t := strings.Split(strings.TrimSpace(line[2:]), " ")
 			q.Result().Metadata.RowCount, _ = strconv.Atoi(t[0])
 			q.Result().Metadata.LastRowId, _ = strconv.Atoi(t[1])
 
-		} else if strings.HasPrefix(line, mapi_MSG_QTRANS) {
+		} else if lineType == QTRANS {
+			q.newResultSet()
+			addedResultSets = true
+
 			q.Result().Metadata.Offset = 0
 			q.Result().Rows = make([][]Value, 0)
 			q.Result().Metadata.LastRowId = 0
 			q.Result().Schema = nil
 			q.Result().Metadata.RowCount = 0
 
-		} else if strings.HasPrefix(line, mapi_MSG_HEADER) {
+		} else if lineType == HEADER {
 			t := strings.Split(line[1:], "#")
 			data := strings.TrimSpace(t[0])
 			identity := strings.TrimSpace(t[1])
@@ -165,29 +245,36 @@ func (q query) StoreResult(r string) error {
 			q.Result().Metadata.Offset = 0
 			q.Result().Metadata.LastRowId = 0
 
-		} else if strings.HasPrefix(line, mapi_MSG_PROMPT) {
+		} else if lineType == PROMT {
+			// At this point we processed all the data that was returned from
+			// the server. In certain cases one or more resultsets have been
+			// created, but not in every case. The client wants to start with
+			// the first resultset, not the last one. Therefore we need to set
+			// the current resultset to the first one.
+			if addedResultSets { q.currentResultSet = 0}
 			return nil
-
-		} else if strings.HasPrefix(line, mapi_MSG_ERROR) {
+		} else if lineType == ERROR {
 			return fmt.Errorf("mapi: database error: %s", line[1:])
+		} else if lineType == UNKNOWN {
+			return fmt.Errorf("mapi: protocol error: %s", line)
 		}
 	}
 
 	return fmt.Errorf("mapi: unknown state: %s", r)
 }
 
-func (q query) FetchNext(offset int, amount int) (string, error) {
-	return q.mapi.fetchNext(q.resultSets[0].Metadata.QueryId, offset, amount)
+func (q *query) FetchNext(offset int, amount int) (string, error) {
+	return q.mapi.fetchNext(q.resultSets[q.currentResultSet].Metadata.QueryId, offset, amount)
 }
 
-func (q query) execute(query string) (string, error) {
+func (q *query) execute(query string) (string, error) {
 	if q.mapi == nil {
 		return "", fmt.Errorf("mapi: database connection is closed")
 	}
 	return q.mapi.Execute(query)
 }
 
-func (q query) PrepareQuery() error {
+func (q *query) PrepareQuery() error {
 	querystring := fmt.Sprintf("PREPARE %s", q.sqlQuery)
 	resultstring, err := q.execute(querystring)
 
@@ -197,16 +284,37 @@ func (q query) PrepareQuery() error {
 	return q.StoreResult(resultstring)
 }
 
-func (q query) ExecutePreparedQuery(args []Value) (string, error) {
-	execStr, err := q.resultSets[0].CreateExecString(args)
+func (q *query) ExecutePreparedQuery(args []Value) (string, error) {
+	execStr, err := q.resultSets[q.currentResultSet].CreateExecString(args)
 	if err != nil {
 		return "", err
-	} 
+	}
 	return q.execute(execStr)
 }
 
-func (q query) ExecuteNamedQuery(names []string, args []Value) (string, error) {
-	execStr, err := q.resultSets[0].CreateNamedString(q.sqlQuery, names, args)
+func (q *query) CreateNamedString(names []string, args []Value) (string, error) {
+	var b bytes.Buffer
+	// A query with named placeholders ends with a colon, before the named arguments list
+	b.WriteString(fmt.Sprintf("%s : ( ", q.sqlQuery))
+
+	for i, v := range args {
+		str, err := ConvertToMonet(v)
+		if err != nil {
+			return "", nil
+		}
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(fmt.Sprintf(" %s ", names[i]))
+		b.WriteString(str)
+	}
+
+		b.WriteString(")")
+		return b.String(), nil
+	}
+
+func (q *query) ExecuteNamedQuery(names []string, args []Value) (string, error) {
+	execStr, err := q.CreateNamedString(names, args)
 	if err != nil {
 		return "", err
 	}
@@ -218,9 +326,14 @@ func (q query) ExecuteQuery() (string, error) {
 }
 
 func (q query) HasNextResultSet() bool {
-	return false
+	return (q.currentResultSet != -1) && (len(q.resultSets) > q.currentResultSet + 1 )
 }
 
-func (q query) NextResultSet() error {
-	return io.EOF
+func (q *query) NextResultSet() error {
+	if q.HasNextResultSet() {
+		q.currentResultSet++
+		return nil
+	} else {
+		return io.EOF
+	}
 }

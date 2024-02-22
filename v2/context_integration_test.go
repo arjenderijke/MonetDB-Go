@@ -446,7 +446,6 @@ func TestContextStmtIntegration(t *testing.T) {
 	})
 
 	t.Run("Prepare statement", func(t *testing.T) {
-
 		stmt, err := db.PrepareContext(ctx, "insert into test3 values ( ?, ? )")
 		if err != nil {
 			t.Fatal(err)

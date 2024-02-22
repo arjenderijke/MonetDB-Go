@@ -84,7 +84,7 @@ func TestResultSetStoreResult(t *testing.T) {
 % 5 # length
 % 16 0 # typesizes
 [ "name1"       ]
-		
+
 `
 		err := r.StoreResult(response)
 		if err != nil {

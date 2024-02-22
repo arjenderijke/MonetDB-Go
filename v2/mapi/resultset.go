@@ -99,27 +99,6 @@ func (s *ResultSet) CreateExecString(args []Value) (string, error) {
 	return b.String(), nil
 }
 
-func (s *ResultSet) CreateNamedString(query string, names []string, args []Value) (string, error) {
-var b bytes.Buffer
-	// A query with named placeholders ends with a colon, before the named arguments list
-	b.WriteString(fmt.Sprintf("%s : ( ", query))
-
-	for i, v := range args {
-		str, err := ConvertToMonet(v)
-		if err != nil {
-			return "", nil
-		}
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(fmt.Sprintf(" %s ", names[i]))
-		b.WriteString(str)
-	}
-
-	b.WriteString(")")
-	return b.String(), nil
-}
-
 func (s *ResultSet) Columns() []string {
 	columns := make([]string, len(s.Schema))
 	for i, d := range s.Schema {

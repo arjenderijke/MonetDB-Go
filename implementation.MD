@@ -39,7 +39,7 @@ We will prefix the error messages with the package name. That way it is clear wh
 - [ ] set_uploader
 - [ ] set_downloader
 - [ ] Configure connection using socket
-- [ ] Implement fetching NextResultSet 
+- [X] Implement fetching NextResultSet
 - [X] Add type aliases
 - [ ] Add monetdb specific types, for example "uuid"
 

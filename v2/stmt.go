@@ -154,26 +154,22 @@ func (s *Stmt) queryResult(ctx context.Context, args []driver.NamedValue) (drive
 	rows := newRows(s.query)
 	r, err := s.mapiDo(ctx, args)
 	if err != nil {
-		rows.err = err
-		return rows, rows.err
+		return rows, err
 	}
 
 	err = s.query.StoreResult(r)
 	if err != nil {
-		rows.err = err
-		return rows, rows.err
+		return rows, err
 	}
 	// We have gotten the first batch of the resultset. The RowCount is the total number of rows in the result.
 	// But we have only at most mapi.MAPI_ARRAY_SIZE rows available.
-	rows.offset = s.query.Result().Metadata.Offset
 	rows.rows = convertRows(s.query.Result().Rows, s.query.Result().Metadata.ColumnCount)
-	rows.schema = s.query.Result().Schema
 
-	return rows, rows.err
+	return rows, err
 }
 
 func (s *Stmt) exec(args []driver.NamedValue) (string, error) {
-	if s.isPreparedStatement && s.query.Result().Metadata.ExecId == -1 {
+	if ((s.isPreparedStatement && (s.query.Result() == nil)) || ((s.query.Result() != nil) && (s.query.Result().Metadata.ExecId == -1))) {
 		err := s.query.PrepareQuery()
 		if err != nil {
 			return "", err

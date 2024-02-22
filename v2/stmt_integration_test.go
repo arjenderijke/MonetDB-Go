@@ -30,7 +30,6 @@ func TestStmtIntegration(t *testing.T) {
 	})
 
 	t.Run("Prepare statement", func(t *testing.T) {
-
 		stmt, err := db.Prepare("insert into test3 values ( ?, ? )")
 		if err != nil {
 			t.Fatal(err)

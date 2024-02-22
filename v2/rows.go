@@ -20,18 +20,14 @@ import (
 type Rows struct {
 	query       mapi.Query
 	active      bool
-	err         error
 	rowNum      int
-	offset      int
 	rows        [][]driver.Value
-	schema      []mapi.TableElement
 }
 
 func newRows(q mapi.Query) *Rows {
 	return &Rows{
 		query:   q,
 		active:  true,
-		err:     nil,
 		rowNum:  0,
 	}
 }
@@ -57,14 +53,14 @@ func (r *Rows) Next(dest []driver.Value) error {
 		return io.EOF
 	}
 
-	if r.rowNum >= r.offset+len(r.rows) {
+	if r.rowNum >= r.query.Result().Metadata.Offset + len(r.rows) {
 		err := r.fetchNext()
 		if err != nil {
 			return err
 		}
 	}
 
-	for i, v := range r.rows[r.rowNum-r.offset] {
+	for i, v := range r.rows[r.rowNum - r.query.Result().Metadata.Offset] {
 		if vv, ok := v.(string); ok {
 			dest[i] = []byte(vv)
 		} else {
@@ -94,7 +90,7 @@ func (s *Rows) mapiDo(ctx context.Context, amount int) (string, error) {
 	c := make(chan res, 1)
 
     go func() {
-		r, err := s.query.FetchNext(s.offset, amount)
+		r, err := s.query.FetchNext(s.query.Result().Metadata.Offset, amount)
 		result := res{r, err}
 		c <- result
 		}()
@@ -113,9 +109,9 @@ func (r *Rows) fetchNext() error {
 		return io.EOF
 	}
 
-	r.offset += len(r.rows)
+	r.query.Result().Metadata.Offset += len(r.rows)
 	end := min(r.query.Result().Metadata.RowCount, r.rowNum+mapi.MAPI_ARRAY_SIZE)
-	amount := end - r.offset
+	amount := end - r.query.Result().Metadata.Offset
 
 	res, err := r.mapiDo(context.Background(), amount)
 	if err != nil {
@@ -124,7 +120,6 @@ func (r *Rows) fetchNext() error {
 
 	r.query.StoreResult(res)
 	r.rows = convertRows(r.query.Result().Rows, r.query.Result().Metadata.ColumnCount)
-	r.schema = r.query.Result().Schema
 
 	return nil
 }
@@ -132,10 +127,10 @@ func (r *Rows) fetchNext() error {
 // See https://pkg.go.dev/database/sql/driver#RowsColumnTypeLength for what to implement
 // This implies that we need to return the InternalSize value, not the DisplaySize
 func (r *Rows) ColumnTypeLength(index int) (length int64, ok bool) {
-	switch r.schema[index].ColumnType {
+	switch r.query.Result().Schema[index].ColumnType {
 	case mapi.MDB_VARCHAR,
 		mapi.MDB_CHAR :
-		return int64(r.schema[index].InternalSize), true
+		return int64(r.query.Result().Schema[index].InternalSize), true
 	case mapi.MDB_BLOB,
 		mapi.MDB_CLOB :
 		return math.MaxInt64, true
@@ -146,7 +141,7 @@ func (r *Rows) ColumnTypeLength(index int) (length int64, ok bool) {
 
 // See https://pkg.go.dev/database/sql/driver#RowsColumnTypeDatabaseTypeName for what to implement
 func (r *Rows) ColumnTypeDatabaseTypeName(index int) string {
-	return strings.ToUpper(r.schema[index].ColumnType)
+	return strings.ToUpper(r.query.Result().Schema[index].ColumnType)
 }
 
 // For now it seems that the mapi protocol does not provide the required information
@@ -156,9 +151,9 @@ func (r *Rows) ColumnTypeNullable(index int) (nullable, ok bool) {
 
 // See https://pkg.go.dev/database/sql/driver#RowsColumnTypePrecisionScale for what to implement
 func (r *Rows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool) {
-	switch r.schema[index].ColumnType {
+	switch r.query.Result().Schema[index].ColumnType {
 	case mapi.MDB_DECIMAL :
-		return int64(r.schema[index].Precision), int64(r.schema[index].Scale), true
+		return int64(r.query.Result().Schema[index].Precision), int64(r.query.Result().Schema[index].Scale), true
 	default:
 		return 0, 0, false
 	}
@@ -168,7 +163,7 @@ func (r *Rows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok b
 func (r *Rows) ColumnTypeScanType(index int) reflect.Type {
 	var scantype reflect.Type
 
-	switch r.schema[index].ColumnType {
+	switch r.query.Result().Schema[index].ColumnType {
 	case mapi.MDB_VARCHAR,
 		mapi.MDB_CHAR,
 		mapi.MDB_CLOB,
@@ -222,5 +217,9 @@ func (r *Rows) HasNextResultSet() bool {
 }
 
 func (r *Rows) NextResultSet() error {
-	return r.query.NextResultSet()
+	err := r.query.NextResultSet()
+	if err == nil {
+		r.rows = convertRows(r.query.Result().Rows, r.query.Result().Metadata.ColumnCount)
+	}
+	return err
 }
