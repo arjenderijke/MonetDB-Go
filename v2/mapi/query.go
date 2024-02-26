@@ -14,7 +14,7 @@ import (
 )
 
 type query struct {
-	mapi   *MapiConn
+	mapi   MapiConn
 	sqlQuery string
 	resultSets []ResultSet
 	currentResultSet int
@@ -41,7 +41,7 @@ type Query interface {
 	NextResultSet() error
 }
 
-func NewQuery(conn *MapiConn, q string) Query {
+func NewQuery(conn MapiConn, q string) Query {
 	res := query {
 		mapi: conn,
 		sqlQuery: q,
@@ -264,7 +264,7 @@ func (q *query) StoreResult(r string) error {
 }
 
 func (q *query) FetchNext(offset int, amount int) (string, error) {
-	return q.mapi.fetchNext(q.resultSets[q.currentResultSet].Metadata.QueryId, offset, amount)
+	return q.mapi.FetchNext(q.resultSets[q.currentResultSet].Metadata.QueryId, offset, amount)
 }
 
 func (q *query) execute(query string) (string, error) {

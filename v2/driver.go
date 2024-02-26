@@ -9,7 +9,7 @@ import (
 	"database/sql/driver"
 )
 
-const DriverVersion = "2.0.0"
+const DriverVersion = "2.1.0"
 
 func init() {
 	sql.Register("monetdb", &Driver{})

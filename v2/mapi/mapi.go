@@ -17,6 +17,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -45,12 +46,24 @@ const mapi_STATE_READY = 1
 const mapi_STATE_INIT = 0
 
 const (
-	MAPI_ARRAY_SIZE = 100
+	mapi_PROTOCOL_VERSION = 9
+	MAPI_ARRAY_SIZE       = 100
 )
 
 var (
 	mapi_MSG_MORE = string([]byte{1, 2, 10})
 )
+
+type MapiConn interface {
+	Connect() error
+	Disconnect()
+	Execute(query string) (string, error)
+	FetchNext(queryId int, offset int, amount int) (string, error)
+	SetSizeHeader(enable bool) (string, error)
+	SetReplySize(size int) (string, error)
+	SetAutoCommit(enable bool) (string, error)
+	SetServerTimezone() error
+}
 
 // MapiConn is a MonetDB's MAPI connection handle.
 //
@@ -61,7 +74,7 @@ var (
 // calling the Connect() function.
 //
 // The State value can be either MAPI_STATE_INIT or MAPI_STATE_READY.
-type MapiConn struct {
+type mapiConn struct {
 	Hostname string
 	Port     int
 	Username string
@@ -74,6 +87,7 @@ type MapiConn struct {
 	sizeHeader bool
 	replySize  int
 	autoCommit bool
+	timezone   *time.Location
 
 	conn *net.TCPConn
 }
@@ -81,14 +95,18 @@ type MapiConn struct {
 // NewMapi returns a MonetDB's MAPI connection handle.
 //
 // To establish the connection, call the Connect() function.
-func NewMapi(name string) (*MapiConn, error) {
+func NewMapi(name string) (*mapiConn, error) {
 	var language = "sql"
 	c, err := parseDSN(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &MapiConn{
+	// TODO: set requested timezone on server
+	//       in the current setup we could only do this after this
+	//       function is called and returned a new object
+	//conn.setServerTimezone()
+	return &mapiConn{
 		Hostname: c.Hostname,
 		Port:     c.Port,
 		Username: c.Username,
@@ -99,13 +117,14 @@ func NewMapi(name string) (*MapiConn, error) {
 		State: mapi_STATE_INIT,
 
 		sizeHeader: true,
-		replySize : MAPI_ARRAY_SIZE,
+		replySize:  MAPI_ARRAY_SIZE,
 		autoCommit: true,
+		// timezone: time.Local
 	}, nil
 }
 
 // Disconnect closes the connection.
-func (c *MapiConn) Disconnect() {
+func (c *mapiConn) Disconnect() {
 	c.State = mapi_STATE_INIT
 	if c.conn != nil {
 		c.conn.Close()
@@ -113,17 +132,17 @@ func (c *MapiConn) Disconnect() {
 	}
 }
 
-func (c *MapiConn) Execute(query string) (string, error) {
+func (c *mapiConn) Execute(query string) (string, error) {
 	cmd := fmt.Sprintf("s%s;", query)
 	return c.cmd(cmd)
 }
 
-func (c *MapiConn) fetchNext(queryId int, offset int, amount int) (string, error) {
+func (c *mapiConn) FetchNext(queryId int, offset int, amount int) (string, error) {
 	cmd := fmt.Sprintf("Xexport %d %d %d", queryId, offset, amount)
 	return c.cmd(cmd)
 }
 
-func (c *MapiConn) SetSizeHeader(enable bool) (string, error) {
+func (c *mapiConn) SetSizeHeader(enable bool) (string, error) {
 	var sizeheader int
 	if enable {
 		sizeheader = 1
@@ -133,12 +152,12 @@ func (c *MapiConn) SetSizeHeader(enable bool) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *MapiConn) SetReplySize(size int) (string, error) {
+func (c *mapiConn) SetReplySize(size int) (string, error) {
 	cmd := fmt.Sprintf("Xreply_size %d", size)
 	return c.cmd(cmd)
 }
 
-func (c *MapiConn) SetAutoCommit(enable bool) (string, error) {
+func (c *mapiConn) SetAutoCommit(enable bool) (string, error) {
 	var autoCommit int
 	if enable {
 		autoCommit = 1
@@ -147,8 +166,30 @@ func (c *MapiConn) SetAutoCommit(enable bool) (string, error) {
 	return c.cmd(cmd)
 }
 
+func (c *mapiConn) SetServerTimezone() error {
+	tz, err := time.LoadLocation(c.timezone.String())
+	if err != nil {
+		return err
+	}
+	if tz.String() != c.timezone.String() {
+		return err
+	}
+	_, offset := time.Now().Zone()
+
+	hours := int(offset / 3600)
+	remaining := offset - 3600*hours
+	minutes := int(remaining / 60)
+	// Go does not have an absolute value function for int
+	if minutes < 0 {
+		minutes = -1 * minutes
+	}
+	query := fmt.Sprintf("SET TIME ZONE INTERVAL '%+03d:%02d' HOUR TO MINUTE;", hours, minutes)
+	_, err = c.Execute(query)
+	return err
+}
+
 // Cmd sends a MAPI command to MonetDB.
-func (c *MapiConn) cmd(operation string) (string, error) {
+func (c *mapiConn) cmd(operation string) (string, error) {
 	if c.State != mapi_STATE_READY {
 		return "", fmt.Errorf("mapi: database is not connected")
 	}
@@ -185,7 +226,7 @@ func (c *MapiConn) cmd(operation string) (string, error) {
 }
 
 // Connect starts a MAPI connection to MonetDB server.
-func (c *MapiConn) Connect() error {
+func (c *mapiConn) Connect() error {
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
@@ -215,12 +256,12 @@ func (c *MapiConn) Connect() error {
 }
 
 // login starts the login sequence
-func (c *MapiConn) login() error {
+func (c *mapiConn) login() error {
 	return c.tryLogin(0)
 }
 
 // tryLogin performs the login activity
-func (c *MapiConn) tryLogin(iteration int) error {
+func (c *mapiConn) tryLogin(iteration int) error {
 	challenge, err := c.getBlock()
 	if err != nil {
 		return err
@@ -286,14 +327,14 @@ func (c *MapiConn) tryLogin(iteration int) error {
 }
 
 // challengeResponse produces a response given a challenge
-func (c *MapiConn) challengeResponse(challenge []byte) (string, error) {
+func (c *mapiConn) challengeResponse(challenge []byte) (string, error) {
 	t := strings.Split(string(challenge), ":")
 	salt := t[0]
 	protocol := t[2]
 	hashes := t[3]
 	algo := t[5]
 
-	if protocol != "9" {
+	if protocol != strconv.Itoa(mapi_PROTOCOL_VERSION) {
 		return "", fmt.Errorf("mapi: we only speak protocol v9")
 	}
 
@@ -330,7 +371,7 @@ func (c *MapiConn) challengeResponse(challenge []byte) (string, error) {
 }
 
 // getBlock retrieves a block of message
-func (c *MapiConn) getBlock() ([]byte, error) {
+func (c *mapiConn) getBlock() ([]byte, error) {
 	r := new(bytes.Buffer)
 
 	last := 0
@@ -362,7 +403,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 }
 
 // getBytes reads the given amount of bytes
-func (c *MapiConn) getBytes(count int) ([]byte, error) {
+func (c *mapiConn) getBytes(count int) ([]byte, error) {
 	r := make([]byte, count)
 	b := make([]byte, count)
 
@@ -380,7 +421,7 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 }
 
 // putBlock sends the given data as one or more blocks
-func (c *MapiConn) putBlock(b []byte) error {
+func (c *mapiConn) putBlock(b []byte) error {
 	pos := 0
 	last := 0
 	for last != 1 {
