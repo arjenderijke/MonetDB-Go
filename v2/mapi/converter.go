@@ -244,7 +244,7 @@ var toGoMappers = map[string]toGoConverter{
 	MDB_TIMESTAMPTZ:    toTimestampTz,
 	MDB_INTERVAL:       strip,
 	MDB_MONTH_INTERVAL: strip,
-	MDB_SEC_INTERVAL:   strip,
+	MDB_SEC_INTERVAL:   toDouble,
 	MDB_TINYINT:        toInt8,
 	MDB_SHORTINT:       toInt16,
 	MDB_MEDIUMINT:      toInt32,

@@ -17,7 +17,7 @@ type Conn struct {
 	mapi mapi.MapiConn
 }
 
-func newConn(name string) (*Conn, error) {
+func newConn(name string, cfg Config) (*Conn, error) {
 	conn := &Conn{
 		mapi: nil,
 	}
@@ -32,9 +32,11 @@ func newConn(name string) (*Conn, error) {
 	}
 
 	conn.mapi = m
-	m.SetSizeHeader(true)
-	// For now, we don't change the servers timezone
-	//m.SetServerTimezone()
+	// TODO: handle return values
+	m.SetAutoCommit(cfg.AutoCommit)
+	m.SetReplySize(cfg.ReplySize)
+	m.SetSizeHeader(cfg.Sizeheader)
+	m.SetServerTimezone(cfg.Timezone)
 	return conn, nil
 }
 

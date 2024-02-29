@@ -62,7 +62,7 @@ type MapiConn interface {
 	SetSizeHeader(enable bool) (string, error)
 	SetReplySize(size int) (string, error)
 	SetAutoCommit(enable bool) (string, error)
-	SetServerTimezone() error
+	SetServerTimezone(timezone *time.Location) error
 }
 
 // MapiConn is a MonetDB's MAPI connection handle.
@@ -102,10 +102,6 @@ func NewMapi(name string) (*mapiConn, error) {
 		return nil, err
 	}
 
-	// TODO: set requested timezone on server
-	//       in the current setup we could only do this after this
-	//       function is called and returned a new object
-	//conn.setServerTimezone()
 	return &mapiConn{
 		Hostname: c.Hostname,
 		Port:     c.Port,
@@ -119,7 +115,7 @@ func NewMapi(name string) (*mapiConn, error) {
 		sizeHeader: true,
 		replySize:  MAPI_ARRAY_SIZE,
 		autoCommit: true,
-		// timezone: time.Local
+		timezone:   time.Local,
 	}, nil
 }
 
@@ -166,26 +162,32 @@ func (c *mapiConn) SetAutoCommit(enable bool) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *mapiConn) SetServerTimezone() error {
-	tz, err := time.LoadLocation(c.timezone.String())
+func (c *mapiConn) SetServerTimezone(timezone *time.Location) error {
+	tz, err := time.LoadLocation(timezone.String())
 	if err != nil {
 		return err
 	}
 	if tz.String() != c.timezone.String() {
+		// The data we use does not matter, we are only interested in the
+		// offset of the timezone
+		tm, err := time.ParseInLocation("2006-01-02", "2024-02-29", timezone)
+		if err != nil {
+			return err
+		}
+		_, offset := tm.Zone()
+
+		hours := int(offset / 3600)
+		remaining := offset - 3600 * hours
+		minutes := int(remaining / 60)
+		// Go does not have an absolute value function for int
+		if minutes < 0 {
+			minutes = -1 * minutes
+		}
+		query := fmt.Sprintf("SET TIME ZONE INTERVAL '%+03d:%02d' HOUR TO MINUTE;", hours, minutes)
+		_, err = c.Execute(query)
 		return err
 	}
-	_, offset := time.Now().Zone()
-
-	hours := int(offset / 3600)
-	remaining := offset - 3600*hours
-	minutes := int(remaining / 60)
-	// Go does not have an absolute value function for int
-	if minutes < 0 {
-		minutes = -1 * minutes
-	}
-	query := fmt.Sprintf("SET TIME ZONE INTERVAL '%+03d:%02d' HOUR TO MINUTE;", hours, minutes)
-	_, err = c.Execute(query)
-	return err
+	return nil
 }
 
 // Cmd sends a MAPI command to MonetDB.
