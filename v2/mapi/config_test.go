@@ -21,6 +21,7 @@ func TestParseDSN(t *testing.T) {
 		{"/"},
 		{""},
 		{":secret@localhost:1234/testdb"},
+		{"user:abcd123@efgh123:abc456@localhost:50000/db", "user", "abcd123@efgh123:abc456", "localhost", "50000", "db"},
 	}
 
 	for _, tc := range tcs {
